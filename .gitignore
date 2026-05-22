@@ -1,0 +1,19 @@
+# Disk images
+disks/
+*.qcow2
+*.vmdk
+*.vdi
+*.img
+*.raw
+*.vhd
+*.vhdx
+
+# OS images
+images/
+
+# ISO files
+isos/
+*.iso
+
+# Snapshots
+snapshots/
