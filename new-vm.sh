@@ -216,34 +216,12 @@ VIRT_CUST_ARGS=(
 )
 [[ -n "$VM_SSHKEY" ]] && VIRT_CUST_ARGS+=(--ssh-inject "${VM_USER}:string:${VM_SSHKEY}")
 
-NETPLAN_TMP=$(mktemp /tmp/netplan-XXXXXX.yaml)
-info "Configuring network: DHCP"
-cat > "$NETPLAN_TMP" <<NETPLAN
-network:
-  version: 2
-  renderer: networkd
-  ethernets:
-    enp1s0:
-      dhcp4: true
-NETPLAN
-
 VIRT_CUST_ARGS+=(
-    # Disable cloud-init entirely — all setup is handled by virt-customize above.
-    # This prevents cloud-init from overwriting our netplan on first boot.
-    --run-command "touch /etc/cloud/cloud-init.disabled"
     # Generate SSH host keys (cloud images ship without them; openssh needs them)
     --run-command "ssh-keygen -A"
-    # Remove any leftover cloud-init run state
-    --run-command "rm -rf /var/lib/cloud/*"
-    # Install our netplan config
-    --run-command "mkdir -p /etc/netplan"
-    --run-command "rm -f /etc/netplan/*.yaml"
-    --upload "${NETPLAN_TMP}:/etc/netplan/99-ipv4only.yaml"
-    --run-command "chmod 600 /etc/netplan/99-ipv4only.yaml"
 )
 virt-customize "${VIRT_CUST_ARGS[@]}"
-rm -f "$NETPLAN_TMP"
-success "Credentials and network config injected"
+success "Credentials injected"
 
 # ── 10. Define the VM ────────────────────────────────────────────────────────
 info "Defining VM with virt-install…"
