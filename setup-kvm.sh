@@ -210,7 +210,23 @@ for POOL_NAME in "${!POOLS[@]}"; do
     virsh pool-start "$POOL_NAME" &>/dev/null || true
 done
 
-# ── 10. Summary ───────────────────────────────────────────────────────────────
+# ── 10. Configure virsh default URI ──────────────────────────────────────────
+info "Configuring virsh default URI to qemu:///system…"
+LIBVIRT_CONF_DIR="$REAL_HOME/.config/libvirt"
+LIBVIRT_CONF="$LIBVIRT_CONF_DIR/libvirt.conf"
+mkdir -p "$LIBVIRT_CONF_DIR"
+chown "$REAL_USER:$REAL_USER" "$LIBVIRT_CONF_DIR"
+
+if grep -qs 'uri_default' "$LIBVIRT_CONF" 2>/dev/null; then
+    sed -i 's|.*uri_default.*|uri_default = "qemu:///system"|' "$LIBVIRT_CONF"
+    success "Updated uri_default in $LIBVIRT_CONF"
+else
+    echo 'uri_default = "qemu:///system"' >> "$LIBVIRT_CONF"
+    success "Written uri_default to $LIBVIRT_CONF"
+fi
+chown "$REAL_USER:$REAL_USER" "$LIBVIRT_CONF"
+
+# ── 11. Summary ───────────────────────────────────────────────────────────────
 echo ""
 success "KVM environment setup complete!"
 echo ""
