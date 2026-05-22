@@ -1,5 +1,6 @@
-# Disk images
-disks/
+# Disk image files
+disks/*
+!disks/.gitkeep
 *.qcow2
 *.vmdk
 *.vdi
@@ -8,12 +9,15 @@ disks/
 *.vhd
 *.vhdx
 
-# OS images
-images/
+# OS image files
+images/*
+!images/.gitkeep
 
 # ISO files
-isos/
+isos/*
 *.iso
+!isos/.gitkeep
 
 # Snapshots
-snapshots/
+snapshots/*
+!snapshots/.gitkeep
