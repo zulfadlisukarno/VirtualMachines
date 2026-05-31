@@ -216,7 +216,7 @@ VIRT_CUST_ARGS=(
     # Override cloudimg SSH settings (sshd_config.d/60-cloudimg-settings.conf may disable password auth)
     --run-command 'mkdir -p /etc/ssh/sshd_config.d && printf "PasswordAuthentication yes\nPermitRootLogin yes\n" > /etc/ssh/sshd_config.d/50-opencode.conf && chmod 644 /etc/ssh/sshd_config.d/50-opencode.conf 2>/dev/null || true'
     # Inject network config: netplan (Ubuntu >= 17.10) or ifupdown (older)
-    --run-command 'if [ -d /etc/netplan ]; then printf "network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    id0:\n      match:\n        driver: virtio_net\n      dhcp4: true\n" > /etc/netplan/01-netcfg.yaml && chmod 600 /etc/netplan/01-netcfg.yaml; else printf "auto ens3\niface ens3 inet dhcp\n" > /etc/network/interfaces.d/50-virtio.cfg; fi'
+    --run-command 'if [ -d /etc/netplan ]; then printf "network:\n  version: 2\n  renderer: networkd\n  ethernets:\n    en-eth:\n      match:\n        name: en*\n      dhcp4: true\n" > /etc/netplan/01-opencode.yaml && chmod 600 /etc/netplan/01-opencode.yaml; else printf "auto ens3\niface ens3 inet dhcp\n" > /etc/network/interfaces.d/50-virtio.cfg; fi'
     # Disable cloud-init to prevent it from overriding injected config
     --run-command "touch /etc/cloud/cloud-init.disabled 2>/dev/null || true"
     # Generate SSH host keys (cloud images ship without them; openssh needs them)

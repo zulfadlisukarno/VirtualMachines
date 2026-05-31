@@ -156,7 +156,29 @@ echo "net.ipv4.ip_forward = 1" > "$SYSCTL_CONF"
 sysctl -w net.ipv4.ip_forward=1 &>/dev/null
 success "IP forwarding enabled"
 
-# ── 8. Set up default NAT network ────────────────────────────────────────────
+# ── 8. Configure firewall for libvirt ────────────────────────────────────────
+if command -v ufw &>/dev/null && ufw status | grep -q "^Status: active$"; then
+    info "UFW detected — adding libvirt rules…"
+    # Allow DHCP (UDP 67) and DNS (UDP 53) on virbr0 for guest VMs
+    ufw allow in on virbr0 proto udp to any port 67 comment "libvirt DHCP" 2>/dev/null || true
+    ufw allow in on virbr0 proto udp to any port 53 comment "libvirt DNS" 2>/dev/null || true
+    # Allow forwarded traffic through virbr0 for NAT
+    if grep -q '^DEFAULT_FORWARD_POLICY="DROP"$' /etc/default/ufw 2>/dev/null; then
+        sed -i 's/^DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+        ufw reload &>/dev/null || true
+    fi
+    success "UFW: libvirt rules added"
+elif command -v nft &>/dev/null && nft list table inet filter &>/dev/null 2>&1; then
+    info "nftables detected — adding libvirt rules to inet filter table…"
+    nft add rule inet filter input iif virbr0 udp dport '{ 53, 67 }' accept comment \"libvirt-dhcp-dns\" 2>/dev/null || true
+    nft add rule inet filter forward iif virbr0 accept comment \"libvirt-fwd-out\" 2>/dev/null || true
+    nft add rule inet filter forward oif virbr0 accept comment \"libvirt-fwd-in\" 2>/dev/null || true
+    success "nftables: libvirt rules added"
+else
+    info "No restrictive firewall detected — skipping"
+fi
+
+# ── 9. Set up default NAT network ────────────────────────────────────────────
 info "Configuring default NAT network…"
 if virsh net-info default &>/dev/null; then
     success "Default network already exists"
@@ -185,7 +207,7 @@ virsh net-autostart default &>/dev/null
 virsh net-start default &>/dev/null || true
 success "Default network active and set to autostart"
 
-# ── 9. Set up storage pools ───────────────────────────────────────────────────
+# ── 10. Set up storage pools ──────────────────────────────────────────────────
 info "Configuring storage pools…"
 VM_BASE="$REAL_HOME/VirtualMachines"
 
@@ -210,7 +232,7 @@ for POOL_NAME in "${!POOLS[@]}"; do
     virsh pool-start "$POOL_NAME" &>/dev/null || true
 done
 
-# ── 10. Configure virsh default URI ──────────────────────────────────────────
+# ── 11. Configure virsh default URI ──────────────────────────────────────────
 info "Configuring virsh default URI to qemu:///system…"
 LIBVIRT_CONF_DIR="$REAL_HOME/.config/libvirt"
 LIBVIRT_CONF="$LIBVIRT_CONF_DIR/libvirt.conf"
@@ -226,7 +248,7 @@ else
 fi
 chown "$REAL_USER:$REAL_USER" "$LIBVIRT_CONF"
 
-# ── 11. Summary ───────────────────────────────────────────────────────────────
+# ── 12. Summary ───────────────────────────────────────────────────────────────
 echo ""
 success "KVM environment setup complete!"
 echo ""
