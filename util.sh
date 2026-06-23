@@ -199,6 +199,100 @@ shutdown_vm() {
     echo ""
 }
 
+# ── delete_vm ────────────────────────────────────────────────────────────────
+delete_vm() {
+    echo ""
+    echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}                      Delete a VM                             ${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    mapfile -t ALL_VMS < <(virsh list --all --name 2>/dev/null | grep -v '^$' || true)
+
+    if [[ ${#ALL_VMS[@]} -eq 0 ]]; then
+        warn "No VMs found."
+        echo ""
+        return
+    fi
+
+    echo -e "  ${YELLOW}All VMs:${NC}"
+    for i in "${!ALL_VMS[@]}"; do
+        printf "  [%d] %s\n" "$((i + 1))" "${ALL_VMS[$i]}"
+    done
+    echo "  [0] Cancel"
+    echo ""
+    read -rp "Select VM to delete [0-${#ALL_VMS[@]}]: " choice
+
+    if [[ "$choice" -eq 0 ]] 2>/dev/null; then
+        info "Cancelled."
+        echo ""
+        return
+    fi
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 ]] || [[ "$choice" -gt "${#ALL_VMS[@]}" ]]; then
+        warn "Invalid selection."
+        echo ""
+        return
+    fi
+
+    local selected="${ALL_VMS[$((choice - 1))]}"
+    local vm_state
+    vm_state=$(virsh domstate "$selected" 2>/dev/null || true)
+
+    echo ""
+    echo -e "  ${RED}WARNING: This will permanently delete VM '${selected}' and its disk.${NC}"
+    read -rp "  Are you sure? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+        info "Cancelled."
+        echo ""
+        return
+    fi
+
+    if [[ "$vm_state" == "running" ]]; then
+        warn "VM '${selected}' is currently running."
+        info "Shutting down '${selected}' before deletion..."
+        virsh shutdown "$selected" &>/dev/null || true
+        local wait=0
+        while [[ "$wait" -lt 30 ]]; do
+            vm_state=$(virsh domstate "$selected" 2>/dev/null || true)
+            [[ "$vm_state" != "running" ]] && break
+            sleep 1
+            ((wait++)) || true
+        done
+        if [[ "$vm_state" == "running" ]]; then
+            warn "Force stopping '${selected}'..."
+            virsh destroy "$selected" &>/dev/null || true
+            sleep 1
+        fi
+        success "VM '${selected}' stopped."
+    fi
+
+    info "Deleting ${selected}..."
+
+    local vm_disks
+    vm_disks=$(virsh domblklist "$selected" 2>/dev/null | awk 'NR>2 && NF>=2 {print $NF}' || true)
+
+    local nvram_path
+    nvram_path=$(virsh dumpxml "$selected" 2>/dev/null | grep nvram | grep -oP '>\K[^<]+' || true)
+
+    if virsh undefine "$selected" --nvram &>/dev/null; then
+        for disk_path in $vm_disks; do
+            if [[ -f "$disk_path" ]]; then
+                info "Removing disk: ${disk_path}"
+                rm -f "$disk_path"
+            fi
+        done
+        if [[ -n "$nvram_path" ]] && [[ -f "$nvram_path" ]]; then
+            info "Removing NVRAM: ${nvram_path}"
+            rm -f "$nvram_path"
+        fi
+        success "${selected} deleted successfully."
+    else
+        die "Failed to delete ${selected}."
+    fi
+    echo ""
+}
+
 # ── main menu ─────────────────────────────────────────────────────────────────
 while true; do
     echo -e "${CYAN}"
@@ -209,16 +303,18 @@ while true; do
     echo "  [1] List VM"
     echo "  [2] Start VM"
     echo "  [3] Shutdown VM"
+    echo "  [4] Delete VM"
     echo "  [0] Exit"
     echo ""
-    read -rp "Select option [0-3]: " OPTION
+    read -rp "Select option [0-4]: " OPTION
 
     case "$OPTION" in
         1) list_vm_ips ;;
         2) start_vm ;;
         3) shutdown_vm ;;
+        4) delete_vm ;;
         0) echo -e "${GREEN}Goodbye!${NC}"; exit 0 ;;
-        *) warn "Invalid option. Please choose 0-3." ;;
+        *) warn "Invalid option. Please choose 0-4." ;;
     esac
     echo ""
 done
